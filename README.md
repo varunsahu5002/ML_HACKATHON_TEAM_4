@@ -208,7 +208,7 @@ Identifiers and label-related columns are excluded from the predictive feature m
 
 ## 9. Ground-Truth Label Alignment
 
-The PathSnap `.route` file is a sequence of arc IDs and is not directly indexed by GPS observation. The current checkout does not contain the label-alignment implementation or the `build_training_data.py` script referenced in earlier documentation, and `training_features.csv` is not checked in. Therefore the claimed alignment procedure and training matrix cannot be reproduced from this checkout. Do not infer per-observation labels by pairing route and track rows by index.
+The PathSnap `.route` file is a chronological sequence of arc IDs, not a per-GPS-observation label table. The repository's `optimize_model.py` training builder labels each observation's nearest generated candidate whose arc appears anywhere in that trip's route. This is a route-membership heuristic; it does not align route sequence position to GPS time, and its labels and derived metrics should be treated as approximate. It does not pair route and track rows by index. The source training archive is supplied separately; the generated `training_features.csv` is not checked in.
 
 ## 10. Machine Learning Implementation
 
@@ -389,13 +389,13 @@ print("Predictions:", predictions)
 print("Probabilities:", probabilities)
 ```
 
-The model-loading example is illustrative. No trained model artifact is checked into this repository, so loading an artifact cannot currently be verified from a clean checkout.
+The model-loading example uses the checked-in provisional Phase 2 artifact at `artifacts/best_model.joblib`. It was fit on all rows from the 80-trip `train` partition using the route-membership labeling heuristic above. The selected baseline HistGradientBoosting pipeline performs median imputation and exposes the seven features above. The comparison used two-fold GroupKFold and one trial per family; this is an API-ready development artifact, not a substitute for the full five-model comparison and Bayesian optimization described in the hackathon guidance. Treat its metrics as preliminary.
 
 ## 13. Repository Structure
 
 The project uses a root-level modular Python structure.
 
-The current checkout contains the data loader and preprocessing modules, candidate and feature modules, five model definitions, baseline training/selection scripts, and the `evaluation/` package with metric helpers and tests. It does **not** contain dataset folders, `training_features.csv`, `label_alignment.py`, `build_training_data.py`, or a saved model artifact. `model_comparison.csv`, `model_config.json`, and confusion-matrix files are historical outputs. `baseline_model_configs.json` records the current five model pipelines as defined in source; it contains no experiment results.
+The current checkout contains the data loader and preprocessing modules, candidate and feature modules, five model definitions, baseline training/selection scripts, and the `evaluation/` package with metric helpers and tests. The training archive is supplied separately; the generated `training_features.csv` is not checked in. `artifacts/best_model.joblib` is the Phase 2 fitted inference artifact. `model_comparison.csv`, `model_config.json`, and confusion-matrix files are historical outputs. `baseline_model_configs.json` records the current five model pipelines as defined in source; it contains no experiment results.
 
 ### Module responsibilities
 
@@ -528,7 +528,7 @@ python generate_confusion_matrix.py
 
 This reruns Random Forest across the same five training-trip folds and writes pooled out-of-fold confusion-matrix diagnostics. These diagnostics are not a separate test score. Existing Phase 1 artifacts are preserved with a `_phase1_preserved` suffix before first replacement.
 
-**Important:** The generated training dataset and saved model artifact may need to be obtained separately because they are not included in the normal GitHub commit.
+**Note:** The training dataset and generated feature table are kept outside the repository. The compact fitted inference artifact is checked in at `artifacts/best_model.joblib`.
 
 ### Run the evaluation tests
 
