@@ -1,0 +1,43 @@
+{
+    "selected_model": "Random Forest",
+    "model_type": "RandomForestClassifier",
+    "model_parameters": {
+        "bootstrap": true,
+        "ccp_alpha": 0.0,
+        "class_weight": "balanced",
+        "criterion": "gini",
+        "max_depth": 20,
+        "max_features": "sqrt",
+        "max_leaf_nodes": null,
+        "max_samples": null,
+        "min_impurity_decrease": 0.0,
+        "min_samples_leaf": 2,
+        "min_samples_split": 2,
+        "min_weight_fraction_leaf": 0.0,
+        "monotonic_cst": null,
+        "n_estimators": 100,
+        "n_jobs": -1,
+        "oob_score": false,
+        "random_state": 42,
+        "verbose": 0,
+        "warm_start": false
+    },
+    "feature_columns": [
+        "distance_to_road_m",
+        "perpendicular_distance_m",
+        "road_length_m",
+        "gps_movement_distance_m",
+        "gps_movement_bearing_deg",
+        "gps_speed_mps",
+        "bearing_difference_deg"
+    ],
+    "target_column": "target_label",
+    "group_column": "trip_id",
+    "validation_method": "One held-out fold from 5-fold GroupKFold",
+    "training_partition": "data/train only, through training_features.csv",
+    "student_test_accessed": false,
+    "confusion_matrix_labels": {
+        "0": "Negative candidate",
+        "1": "Positive candidate"
+    }
+}
