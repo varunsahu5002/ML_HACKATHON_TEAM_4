@@ -139,7 +139,7 @@ def predict(payload: PredictionRequest, request: Request):
         classes = list(model.classes_)
         positive_index = classes.index(1)
         scores = np.asarray(probabilities)[:, positive_index]
-    except (ValueError, TypeError, IndexError, AttributeError) as exc:
+    except Exception as exc:
         return JSONResponse(
             status_code=500,
             content={"error": "prediction_failed", "detail": str(exc)},
