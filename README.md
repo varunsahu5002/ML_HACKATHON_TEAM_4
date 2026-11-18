@@ -429,6 +429,57 @@ The current checkout contains the data loader and preprocessing modules, candida
 
 ## 15. Installation and Execution
 
+### Phase 2 FastAPI backend
+
+The backend scores one or more road candidates for a single GPS observation. It loads Member 1's finalized Joblib artifact once during application startup. By default, the artifact is expected at `artifacts/best_model.joblib` and must use the seven features in the order recorded by `model_utils.save_model`. The trained pipeline performs its own training-matched median imputation; the API does not fit or apply a second preprocessor.
+
+Install and start from the repository root:
+
+```bash
+python -m venv .venv
+```
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+```bash
+pip install -r backend/requirements.txt
+uvicorn backend.main:app --reload
+```
+
+If the artifact is stored elsewhere, set `PATHSNAP_MODEL_PATH` to its path before starting Uvicorn. Relative paths are resolved from the repository root. `/health` remains available when the artifact is missing or invalid and reports `model_loaded: false`; `/predict` then returns HTTP 503 with a diagnostic.
+
+#### `GET /health`
+
+Returns HTTP 200 and whether the model loaded:
+
+```json
+{"status":"ok","model_loaded":true,"model_name":"Tuned Random Forest"}
+```
+
+When startup cannot load the artifact, `status` is `degraded`, `model_loaded` is `false`, and `model_error` explains why.
+
+#### `POST /predict`
+
+Provide a non-empty `candidates` array. Each candidate contains the seven numeric model features; `candidate_road_id` is optional metadata returned with its score. Features can be `null` when unavailable, matching the model pipeline's median imputation. Unknown fields, invalid ranges, or missing required feature keys receive HTTP 422.
+
+Request example:
+
+```bash
+curl -X POST http://127.0.0.1:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"candidates":[{"candidate_road_id":123,"distance_to_road_m":8.4,"perpendicular_distance_m":8.4,"road_length_m":120.0,"gps_movement_distance_m":15.2,"gps_movement_bearing_deg":87.0,"gps_speed_mps":7.6,"bearing_difference_deg":12.0},{"candidate_road_id":456,"distance_to_road_m":25.0,"perpendicular_distance_m":25.0,"road_length_m":80.0,"gps_movement_distance_m":15.2,"gps_movement_bearing_deg":87.0,"gps_speed_mps":7.6,"bearing_difference_deg":74.0}]}'
+```
+
+Response example:
+
+```json
+{"predictions":[{"candidate_road_id":123,"prediction":1,"match_probability":0.91},{"candidate_road_id":456,"prediction":0,"match_probability":0.08}],"model_name":"Tuned Random Forest"}
+```
+
+`prediction` is the model's class (`1` for a positive candidate match, `0` otherwise); `match_probability` is the probability assigned to class `1`. Candidates are returned in request order. Interactive API documentation is available at `/docs`.
+
 ### Prerequisites
 
 - Python 3.11
