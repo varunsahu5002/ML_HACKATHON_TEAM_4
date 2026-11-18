@@ -1,0 +1,1 @@
+"""PathSnap HTTP API package."""
