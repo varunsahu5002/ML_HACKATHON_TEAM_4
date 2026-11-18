@@ -14,7 +14,7 @@ candidate_sets = [
 ]
 
 # Highest-ranked candidate predicted by the model
-top1_predictions = [101, 202, 302, 404, 501]
+top1_predictions = [101, 202, 302, 402, 501]
 
 results = evaluate_candidate_generation(
     y_true,
