@@ -137,11 +137,11 @@ The training partition is used for preprocessing, candidate generation, feature 
 
 ### Student test partition
 
-The `student_test/` partition is reserved for the designated final evaluation stage.
+The `student_test/` partition contains 10 trips and is reserved for development-stage evaluation after model choices have been made using training-trip cross-validation. Do not use its labels for fitting, cross-validation, feature selection, hyperparameter or threshold optimization, or model selection. Report its results separately and do not use them to revise decisions.
 
-It is not used for model training or model selection.
+### Evaluator-test partition
 
-The evaluator-provided test data is also kept separate until the team is ready to perform the final evaluation according to the hackathon instructions.
+The evaluator-test partition contains 10 trips and is final-evaluation-only. It must remain untouched during development: do not inspect its ground truth or use it for fitting, validation, feature selection, tuning, model/threshold selection, or development comparisons. The prediction path must not load its route file.
 
 ## 6. Data Preprocessing
 
@@ -208,19 +208,7 @@ Identifiers and label-related columns are excluded from the predictive feature m
 
 ## 9. Ground-Truth Label Alignment
 
-Supervised labels are generated using the available reference route information.
-
-The label-alignment process performs sequence-aware alignment between GPS observations and reference route arcs.
-
-The aligned reference road IDs are compared with generated candidate road IDs to determine candidate labels.
-
-The current training-data builder applies the following filtering conditions:
-
-- Retains observations having exactly one positive candidate.
-- Uses a provisional maximum alignment error threshold of 30 metres.
-- Excludes observations that do not satisfy these conditions.
-
-This produces the labelled candidate-road dataset used for supervised machine learning.
+The PathSnap `.route` file is a sequence of arc IDs and is not directly indexed by GPS observation. The current checkout does not contain the label-alignment implementation or the `build_training_data.py` script referenced in earlier documentation, and `training_features.csv` is not checked in. Therefore the claimed alignment procedure and training matrix cannot be reproduced from this checkout. Do not infer per-observation labels by pairing route and track rows by index.
 
 ## 10. Machine Learning Implementation
 
@@ -231,11 +219,13 @@ The ML module trains and compares multiple classifiers to identify the most suit
 | Metric | Value |
 |---|---:|
 | Training trips | 80 |
-| Candidate rows | 1,234,949 |
-| Positive labels | 181,257 |
-| Negative labels | 1,053,692 |
+| Candidate rows (previously reported) | 1,234,949 |
+| Positive labels (previously reported) | 181,257 |
+| Negative labels (previously reported) | 1,053,692 |
 | Predictive features | 7 |
 | Number of classes | 2 |
+
+These training-row counts were recorded in the earlier README; the feature matrix is missing from this repository, so the counts have not been independently checked.
 
 The task is formulated as a binary classification problem.
 
@@ -272,31 +262,32 @@ Randomly splitting individual observations could allow information from the same
 
 To reduce this leakage risk, the model comparison process uses:
 
-**5-Fold GroupKFold Cross-Validation**
+**5-Fold GroupKFold Cross-Validation**, grouping by the `trip_id` column.
 
 The trip identifier is used as the grouping variable.
 
-This ensures that observations belonging to the same trip remain within the same fold.
+This ensures that observations belonging to the same trip remain within one fold. Corrected evaluation calculates pooled out-of-fold metrics over all validation rows; it also reports fold Macro-F1 mean and standard deviation to show fold variability. Split order is deterministic (`shuffle=False`).
 
 ### Evaluation metrics
 
-The following metrics are calculated:
+The corrected comparison reports:
 
-- Accuracy
-- Precision
-- Recall
-- F1-score
-- Log Loss
-- Training time
-- Prediction time
+- Accuracy.
+- Positive-class precision, recall, and binary F1.
+- Macro precision, macro recall, and Macro F1 across both classes.
+- Log loss when all evaluated models provide class probabilities.
+- Observation-level top-1 accuracy when candidate observation identifiers are present.
+- Candidate miss rate only when reference roads and the complete candidate sets are available; it cannot be recovered from a filtered candidate-row file.
+- Route continuity only when decoded route sequences and directed road adjacency are available.
+- Total cross-validation training and prediction times, plus prediction time per row.
 
-F1-score is the primary model-selection metric because the positive and negative classes are imbalanced.
+Macro F1 is the corrected baseline selection metric. Binary F1 remains separately named for positive-candidate performance; it is not a substitute for Macro F1. Metrics unavailable from the supplied evaluation inputs are reported as N/A, not inferred.
 
-### Actual model comparison results
+### Phase 1 recorded results (not reproduced)
 
-The following results were obtained from the completed five-model GroupKFold experiment.
+The committed `model_comparison.csv` contains the following Phase 1 values, with a binary `f1` column. The original code averaged per-fold metrics without weighting by validation-row count; the corresponding `training_features.csv`, label builder, fold-level predictions, and experiment log are absent from this checkout, so these figures have not been independently reproduced or verified. `model_comparison_phase1_preserved.csv` preserves this original table. Do not interpret it as the corrected pooled Macro-F1 comparison.
 
-| Model | Accuracy | Precision | Recall | F1-score |
+| Model | Accuracy | Positive precision | Positive recall | Binary F1 |
 |---|---:|---:|---:|---:|
 | Random Forest | 0.873575 | 0.545386 | 0.827797 | **0.657445** |
 | Hist Gradient Boosting | **0.907599** | **0.726176** | 0.593441 | 0.652932 |
@@ -304,9 +295,9 @@ The following results were obtained from the completed five-model GroupKFold exp
 | SGD Classifier | 0.825922 | 0.451440 | 0.874317 | 0.595324 |
 | Logistic Regression | 0.825395 | 0.450558 | 0.874006 | 0.594488 |
 
-### Selected baseline: Random Forest
+### Phase 1 provisional baseline: Random Forest
 
-Random Forest achieved the highest mean F1-score among the five evaluated models.
+Random Forest has been recorded as the Phase 1 provisional choice using binary F1. It has not yet been selected under the corrected pooled out-of-fold Macro-F1 criterion because the Phase 1 training data and feature-generation artifacts are unavailable for rerunning the comparison.
 
 Its cross-validation results were:
 
@@ -315,16 +306,16 @@ Its cross-validation results were:
 | Accuracy | 87.36% |
 | Precision | 54.54% |
 | Recall | 82.78% |
-| F1-score | 0.657445 |
+| Binary F1 | 0.657445 |
 | Log Loss | 0.273482 |
 
-Hist Gradient Boosting achieved higher accuracy and lower log loss, while Random Forest achieved the highest F1-score.
+In the unverified Phase 1 table, Hist Gradient Boosting has higher reported accuracy and lower reported log loss, while Random Forest has the highest reported binary F1.
 
-Therefore, Random Forest was selected as the baseline classifier using mean F1-score as the primary selection criterion.
+The corrected training script selects by pooled out-of-fold Macro F1 when the missing training feature matrix is provided. Until that run completes, Random Forest is a historical provisional baseline only.
 
-### Separate held-out validation
+### Phase 1 single-fold artifact (not independent validation)
 
-An additional evaluation was performed using one held-out fold from a five-fold GroupKFold split.
+The checked-in confusion-matrix artifacts and values below are historical Phase 1 results from one fold of the same five-fold training-trip GroupKFold procedure, not an independent holdout. Their input matrix is absent, so they have not been reproduced in this audit. The corrected generator now creates a pooled out-of-fold confusion matrix so its metrics align with the five-fold comparison.
 
 | Metric | Value |
 |---|---:|
@@ -336,7 +327,7 @@ An additional evaluation was performed using one held-out fold from a five-fold 
 | Accuracy | 85.9998% |
 | Precision | 51.2252% |
 | Recall | 78.0109% |
-| F1-score | 0.618422 |
+| Binary F1 | 0.618422 |
 
 Confusion matrix:
 
@@ -345,7 +336,7 @@ Confusion matrix:
 | Negative | 185,711 | 26,872 |
 | Positive | 7,955 | 28,222 |
 
-These metrics belong to a separate held-out fold and are not the five-fold average reported in the model comparison table.
+These metrics belong to one historical fold and are not pooled five-fold results.
 
 The generated outputs are:
 
@@ -354,7 +345,7 @@ The generated outputs are:
 
 ## 12. Model Saving and Probability Prediction
 
-The selected baseline model is serialized using Joblib.
+When `train_models.py` completes with the required training-only feature matrix, it serializes the model selected by pooled out-of-fold Macro F1 using Joblib. The checked-in Phase 1 configuration is historical and does not establish the corrected selection.
 
 The model utility module supports:
 
@@ -398,60 +389,13 @@ print("Predictions:", predictions)
 print("Probabilities:", probabilities)
 ```
 
-Model loading and probability prediction were successfully verified using a small sample from the development training dataset.
-
-This verification confirms that the saved model can be loaded and used for inference. It does not represent final unseen-data evaluation.
+The model-loading example is illustrative. No trained model artifact is checked into this repository, so loading an artifact cannot currently be verified from a clean checkout.
 
 ## 13. Repository Structure
 
 The project uses a root-level modular Python structure.
 
-```text
-ML_HACKATHON_TEAM_4/
-|
-|-- data/
-|   |-- train/
-|   |-- student_test/
-|
-|-- models/
-|   |-- __init__.py
-|   |-- logistic_regression_model.py
-|   |-- random_forest_model.py
-|   |-- extra_trees_model.py
-|   |-- gradient_boosting_model.py
-|   |-- sgd_model.py
-|
-|-- artifacts/
-|   |-- best_model.joblib       # Local model artifact; not pushed
-|
-|-- data_loader.py
-|-- data_exploration.py
-|-- preprocessing.py
-|-- candidate_generation.py
-|-- feature_engineering.py
-|-- feature_utils.py
-|-- label_alignment.py
-|-- build_training_data.py
-|
-|-- model_training.py
-|-- model_selection.py
-|-- model_utils.py
-|-- train_models.py
-|-- generate_confusion_matrix.py
-|
-|-- FEATURE_ENGINEERING.md
-|-- feature_matrix_sample.csv
-|-- alignment_test.csv
-|-- model_comparison.csv
-|-- model_config.json
-|-- confusion_matrix.csv
-|-- confusion_matrix.png
-|
-|-- .gitignore
-|-- README.md
-```
-
-**Note:** The tree documents the project files and local working artifacts. Some files, including generated datasets and the saved model, are not included in the GitHub commit. Check the repository branch for the exact committed file list.
+The current checkout contains the data loader and preprocessing modules, candidate and feature modules, five model definitions, baseline training/selection scripts, and the `evaluation/` package with metric helpers and tests. It does **not** contain dataset folders, `training_features.csv`, `label_alignment.py`, `build_training_data.py`, or a saved model artifact. `model_comparison.csv`, `model_config.json`, and confusion-matrix files are historical outputs. `baseline_model_configs.json` records the current five model pipelines as defined in source; it contains no experiment results.
 
 ### Module responsibilities
 
@@ -463,13 +407,11 @@ ML_HACKATHON_TEAM_4/
 | `candidate_generation.py` | Generates nearby candidate road segments |
 | `feature_engineering.py` | Extracts candidate-road features |
 | `feature_utils.py` | Provides supporting feature calculations |
-| `label_alignment.py` | Aligns GPS observations with reference routes |
-| `build_training_data.py` | Builds the labelled training feature matrix |
 | `model_training.py` | Provides model construction utilities |
 | `model_selection.py` | Performs cross-validation and model comparison |
 | `model_utils.py` | Handles model saving, loading and inference |
 | `train_models.py` | Runs baseline model training and selection |
-| `generate_confusion_matrix.py` | Generates a held-out validation confusion matrix |
+| `generate_confusion_matrix.py` | Generates a pooled out-of-fold training-trip confusion matrix |
 
 ## 14. Technology Stack
 
@@ -512,18 +454,12 @@ python -m venv .venv
 ### Step 3: Install dependencies
 
 ```bash
-pip install numpy pandas scipy scikit-learn joblib matplotlib seaborn optuna
+pip install numpy pandas scipy scikit-learn joblib matplotlib seaborn optuna pytest
 ```
 
-### Step 4: Generate the training feature matrix
+### Step 4: Provide the training feature matrix
 
-Ensure that the development training data is available under `data/train/`.
-
-```bash
-python build_training_data.py
-```
-
-This generates the labelled `training_features.csv` dataset.
+This checkout currently lacks both `build_training_data.py` and `training_features.csv`. The training command below cannot run until the team's training-only label-alignment/feature-generation workflow is restored and the resulting training matrix is supplied. The `.route` sequence must not be matched to `.track` rows by index.
 
 ### Step 5: Train and compare baseline models
 
@@ -531,7 +467,7 @@ This generates the labelled `training_features.csv` dataset.
 python train_models.py
 ```
 
-This performs the five-fold GroupKFold comparison, selects the best baseline model according to mean F1-score and saves the trained model.
+This performs five-fold trip-grouped cross-validation, selects by pooled out-of-fold Macro F1, records the corrected metrics/configuration, preserves the original comparison table on the first corrected run, and saves the selected model. It reads only `training_features.csv`.
 
 ### Step 6: Generate the confusion matrix
 
@@ -539,9 +475,17 @@ This performs the five-fold GroupKFold comparison, selects the best baseline mod
 python generate_confusion_matrix.py
 ```
 
-This performs a separate held-out GroupKFold evaluation and generates the confusion matrix and model configuration outputs.
+This reruns Random Forest across the same five training-trip folds and writes pooled out-of-fold confusion-matrix diagnostics. These diagnostics are not a separate test score. Existing Phase 1 artifacts are preserved with a `_phase1_preserved` suffix before first replacement.
 
 **Important:** The generated training dataset and saved model artifact may need to be obtained separately because they are not included in the normal GitHub commit.
+
+### Run the evaluation tests
+
+```bash
+python -m pytest -q
+```
+
+The tests cover metric semantics, candidate misses, trip-disjoint/repeatable GroupKFold splits, leakage-safe feature selection, and execution of all five model pipelines on a small synthetic fixture. That fixture verifies code paths only; it is not a PathSnap performance result.
 
 ## 16. Current Development Status
 
@@ -552,15 +496,18 @@ This performs a separate held-out GroupKFold evaluation and generates the confus
 | Road network construction | Implemented |
 | Candidate generation | Implemented |
 | Feature engineering | Implemented |
-| Ground-truth label alignment | Implemented |
-| Training feature generation | Completed for 80 trips |
+| Ground-truth label alignment | Not present in this checkout; must be restored before training |
+| Training feature generation | Not reproducible from this checkout; builder and feature matrix are absent |
 | Five baseline ML models | Implemented |
-| GroupKFold model comparison | Completed |
-| Baseline model selection | Completed |
-| Model saving and loading | Verified locally |
-| Probability prediction | Verified locally |
-| Confusion matrix | Generated |
-| Model configuration | Generated |
+| Phase 1 GroupKFold result | Historical CSV exists; training inputs and run log are absent, so it is unverified |
+| Corrected baseline comparison | Code updated; pending a run with the training feature matrix |
+| Baseline model selection | Pending corrected pooled Macro-F1 run |
+| Student-test evaluation | Pending; use only after training-trip decisions and do not use labels to revise them |
+| Evaluator-test data | Not accessed; reserved for final evaluation |
+| Model saving and loading | Code implemented; no artifact checked in for clean-checkout verification |
+| Probability prediction | Supported by model code; no saved artifact checked in |
+| Confusion matrix | Historical Phase 1 artifact; corrected pooled OOF generator is pending the missing training matrix |
+| Model configuration | Five current estimator/pipeline configurations recorded in `baseline_model_configs.json`; run-specific config pending a training run |
 | HMM/Viterbi integration | Pending integration verification |
 | Final evaluator testing | Pending |
 
@@ -584,4 +531,4 @@ Potential future improvements include:
 
 **Project:** PathSnap – GPS Trajectory Map Matching
 
-**Development stage:** Baseline ML implementation and validation completed; full-system integration and final evaluation pending.
+**Development stage:** Phase 1 baseline is recorded but not reproducible from this checkout. Corrected metric/CV code is in preparation; training-data generation and a verified baseline run remain pending. Hyperparameter optimization has not started.

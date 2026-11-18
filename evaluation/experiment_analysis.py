@@ -28,10 +28,19 @@ def create_experiment_summary(
         summary["models"].append({
             "model_name": result["model_name"],
             "accuracy": metrics.get("accuracy"),
+            "precision": metrics.get("binary_precision"),
+            "recall": metrics.get("binary_recall"),
             "macro_precision": metrics.get("macro_precision"),
             "macro_recall": metrics.get("macro_recall"),
             "macro_f1": metrics.get("macro_f1"),
-            "weighted_f1": metrics.get("weighted_f1")
+            "binary_f1": metrics.get("binary_f1"),
+            "weighted_f1": metrics.get("weighted_f1"),
+            "log_loss": metrics.get("log_loss"),
+            "top1_accuracy": metrics.get("top1_accuracy"),
+            "candidate_miss_rate": metrics.get("candidate_miss_rate"),
+            "route_continuity": metrics.get("route_continuity"),
+            "training_time_seconds": metrics.get("training_time_seconds"),
+            "prediction_time_seconds": metrics.get("prediction_time_seconds"),
         })
 
     summary["models"].sort(
